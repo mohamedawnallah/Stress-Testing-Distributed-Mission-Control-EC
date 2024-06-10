@@ -44,7 +44,7 @@ class ExternalCoordinatorStub(object):
                 request_serializer=external__coordinator__pb2.RegisterMissionControlRequest.SerializeToString,
                 response_deserializer=external__coordinator__pb2.RegisterMissionControlResponse.FromString,
                 _registered_method=True)
-        self.QueryAggregatedMissionControl = channel.unary_unary(
+        self.QueryAggregatedMissionControl = channel.unary_stream(
                 '/ecrpc.ExternalCoordinator/QueryAggregatedMissionControl',
                 request_serializer=external__coordinator__pb2.QueryAggregatedMissionControlRequest.SerializeToString,
                 response_deserializer=external__coordinator__pb2.QueryAggregatedMissionControlResponse.FromString,
@@ -76,7 +76,7 @@ def add_ExternalCoordinatorServicer_to_server(servicer, server):
                     request_deserializer=external__coordinator__pb2.RegisterMissionControlRequest.FromString,
                     response_serializer=external__coordinator__pb2.RegisterMissionControlResponse.SerializeToString,
             ),
-            'QueryAggregatedMissionControl': grpc.unary_unary_rpc_method_handler(
+            'QueryAggregatedMissionControl': grpc.unary_stream_rpc_method_handler(
                     servicer.QueryAggregatedMissionControl,
                     request_deserializer=external__coordinator__pb2.QueryAggregatedMissionControlRequest.FromString,
                     response_serializer=external__coordinator__pb2.QueryAggregatedMissionControlResponse.SerializeToString,
@@ -129,7 +129,7 @@ class ExternalCoordinator(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(
+        return grpc.experimental.unary_stream(
             request,
             target,
             '/ecrpc.ExternalCoordinator/QueryAggregatedMissionControl',
