@@ -50,6 +50,14 @@ For stress testing the RESTful API endpoint provided via the gRPC Gateway, use t
 python client_rest.py
 ```
 
+### Visualizing the response time results
+
+To visualize the response times generated from either rest or gRPC, use the following command:
+
+```bash
+python visualize.py <response_times_file>
+```
+
 ## Notes
 
 - Make sure to replace placeholders in the commands (like `<external_coordinator_proto_dir>`) with actual values specific to your project.
