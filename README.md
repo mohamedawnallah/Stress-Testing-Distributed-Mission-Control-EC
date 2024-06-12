@@ -1,3 +1,9 @@
+# Stress Testing Results
+
+The following image shows the response times for register and query data operations from 50,000 concurrent users:
+
+![Response Times](assets/grpc_50000_users_response_times.png)
+
 # Project Setup Instructions
 
 ## Setting Up the Python Environment
