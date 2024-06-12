@@ -8,8 +8,19 @@ import concurrent.futures
 from ecdsa import SigningKey, SECP256k1
 
 def register_mission_control(session, server_url, pairs, request_num):
-    """Registers mission control data via HTTP POST with multiple node pairs"""
-    url = f"{server_url}/v1/registermissioncontrol"
+    """
+    Registers mission control data via HTTP POST with multiple node pairs.
+
+    Args:
+        session (requests.Session): The HTTP session to use for the request.
+        server_url (str): The server URL.
+        pairs (list): List of node pairs to register.
+        request_num (int): The request number for logging purposes.
+
+    Returns:
+        tuple: Response time and status code.
+    """
+    url = f"{server_url}/v1/register_mission_control"
     payload = {"pairs": pairs}
     headers = {'Content-Type': 'application/json'}
     start_time = time.time()
@@ -20,8 +31,18 @@ def register_mission_control(session, server_url, pairs, request_num):
     return end_time, response.status_code
 
 def query_aggregated_mission_control(session, server_url, request_num):
-    """Queries aggregated mission control data via HTTP GET"""
-    url = f"{server_url}/v1/queryaggregatedmissioncontrol"
+    """
+    Queries aggregated mission control data via HTTP GET.
+
+    Args:
+        session (requests.Session): The HTTP session to use for the request.
+        server_url (str): The server URL.
+        request_num (int): The request number for logging purposes.
+
+    Returns:
+        tuple: Response time and status code.
+    """
+    url = f"{server_url}/v1/query_aggregated_mission_control"
     start_time = time.time()
     response = session.get(url, stream=True)
     end_time = time.time() - start_time
@@ -44,20 +65,26 @@ def query_aggregated_mission_control(session, server_url, request_num):
     return end_time, 200
 
 def generate_random_node():
-    """Generate a random node identifier"""
+    """
+    Generates a random node identifier.
+
+    Returns:
+        str: A base64-encoded compressed public key representing the node.
+    """
     private_key = SigningKey.generate(curve=SECP256k1)
     compressed_public_key = private_key.get_verifying_key().to_string("compressed")
     return base64.b64encode(compressed_public_key).decode("utf-8")
 
 def generate_random_history():
-    """Generate random history data"""
-    # Get the current time
-    current_time = int(time.time())
+    """
+    Generates random history data for mission control.
 
-    # Define the range for one week (in seconds)
+    Returns:
+        dict: Randomly generated history data.
+    """
+    current_time = int(time.time())
     one_week = 7 * 24 * 60 * 60
 
-    # Generate random values within the one-week range
     fail_time = random.randint(current_time - one_week, current_time)
     success_time = random.randint(current_time - one_week, current_time)
 
@@ -73,19 +100,32 @@ def generate_random_history():
         "success_amt_msat": success_amt_sat * 1000,
     }
 
-def save_data_to_json(register_response_times, query_response_times, register_failure_rate, query_failure_rate, directory="data", filename="rest_response_times.json"):
-    # Create directory if it does not exist
+def save_data_to_json(register_response_times, query_response_times, register_failure_rate, query_failure_rate, mc_entries_registered, mc_entries_per_register, directory="data", filename="rest_response_times.json"):
+    """
+    Saves response times and failure rates to a JSON file.
+
+    Args:
+        register_response_times (list): List of register request response times.
+        query_response_times (list): List of query request response times.
+        register_failure_rate (float): Failure rate for register requests.
+        query_failure_rate (float): Failure rate for query requests.
+        mc_entries_registered (int): Number of mission control entries registered.
+        mc_entries_per_register (int): Number of entries per register request.
+        directory (str): Directory to save the file in.
+        filename (str): Name of the JSON file.
+    """
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    # Construct full file path
     filepath = os.path.join(directory, filename)
 
     data = {
         "register_response_times": register_response_times,
         "query_response_times": query_response_times,
         "register_failure_rate": register_failure_rate,
-        "query_failure_rate": query_failure_rate
+        "query_failure_rate": query_failure_rate,
+        "mc_entries_per_register": mc_entries_per_register,
+        "mc_entries_registered": mc_entries_registered,
     }
 
     with open(filepath, 'w') as f:
@@ -93,17 +133,21 @@ def save_data_to_json(register_response_times, query_response_times, register_fa
     print(f"Data saved to {filepath}")
 
 def main():
-    cert = "/Users/mohamedawnallah/Library/Application Support/ExternalCoordinator/tls.crt"
-    server_url = "https://localhost:8085"
+    """
+    Main function to perform RESTful register and query operations and save the results.
+    """
+    cert = "EC_DIR/tls.cert"
+    server_url = "https://localhost:8081"
 
     session = requests.Session()
     session.verify = cert
 
     # Make an initial request to the server for establishing TLS handshake excluding it
     # from the performance results.
+    print("Making 1st request for TLS handshake!")
     query_aggregated_mission_control(session=session, server_url=server_url, request_num=0)
 
-    num_requests, num_pairs = 1000, 3
+    num_requests, mc_entries_per_register = 20, 3
     register_response_times, query_response_times = [], []
     register_failed_requests, query_failed_requests = 0, 0
     tasks = []
@@ -113,16 +157,15 @@ def main():
         print("Preparing request:", request+1)
         if random.choice(['register', 'query']) == 'register':
             pairs = []
-            for _ in range(num_pairs):
-                for _ in range(num_pairs):
-                    node_from = generate_random_node()
-                    node_to = generate_random_node()
-                    history = generate_random_history()
-                    pairs.append({
-                        "nodeFrom": node_from,
-                        "nodeTo": node_to,
-                        "history": history
-                    })
+            for _ in range(mc_entries_per_register):
+                node_from = generate_random_node()
+                node_to = generate_random_node()
+                history = generate_random_history()
+                pairs.append({
+                    "nodeFrom": node_from,
+                    "nodeTo": node_to,
+                    "history": history
+                })
             tasks.append(('register', session, server_url, pairs, request+1))
         else:
             tasks.append(('query', session, server_url, request+1))
@@ -153,12 +196,17 @@ def main():
 
     register_failure_rate = register_failed_requests / len(register_response_times)
     query_failure_rate = query_failed_requests / len(query_response_times)
-
+    mc_entries_registered = len(register_response_times) * mc_entries_per_register
     print(f"Total Register Requests: {len(register_response_times)}, Failed Register Requests: {register_failed_requests}, Register Failure Rate: {register_failure_rate:.4f}")
     print(f"Total Query Requests: {len(query_response_times)}, Failed Query Requests: {query_failed_requests}, Query Failure Rate: {query_failure_rate:.4f}")
+    print(f"Mission Contorl Entries Registered: {mc_entries_registered}")
+    print(f"Mission Contorl Entries per Register: {mc_entries_per_register}")
 
     # Save data to JSON file.
-    save_data_to_json(register_response_times, query_response_times, register_failure_rate, query_failure_rate)
+    save_data_to_json(
+        register_response_times=register_response_times, query_response_times=query_response_times, register_failure_rate=register_failure_rate,
+        query_failure_rate=query_failure_rate, mc_entries_registered=mc_entries_registered, mc_entries_per_register=mc_entries_per_register
+    )
 
 if __name__ == '__main__':
     main()
