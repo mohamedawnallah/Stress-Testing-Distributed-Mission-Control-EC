@@ -8,25 +8,43 @@ from ecdsa import SigningKey, SECP256k1
 from external_coordinator_pb2_grpc import ExternalCoordinatorStub
 from external_coordinator_pb2 import RegisterMissionControlRequest, QueryAggregatedMissionControlRequest, PairHistory, PairData
 
-def get_secure_channel(target: str, cert:str):
+def get_secure_channel(target: str, cert: str):
+    """
+    Creates a secure gRPC channel using the provided certificate.
+
+    Args:
+        target (str): The server address.
+        cert (str): Path to the certificate file.
+
+    Returns:
+        grpc.Channel: A secure gRPC channel.
+    """
     with open(cert, 'rb') as f:
         trusted_certs = f.read()
     credentials = grpc.ssl_channel_credentials(root_certificates=trusted_certs)
     return grpc.secure_channel(target, credentials)
 
 def generate_random_node():
+    """
+    Generates a random node identifier using ECDSA.
+
+    Returns:
+        bytes: A compressed public key representing the node.
+    """
     private_key = SigningKey.generate(curve=SECP256k1)
     compressed_public_key = private_key.get_verifying_key().to_string("compressed")
     return compressed_public_key
 
 def generate_random_history():
-    # Get the current time
-    current_time = int(time.time())
+    """
+    Generates random history data for mission control.
 
-    # Define the range for one week (in seconds)
+    Returns:
+        PairData: Randomly generated PairData object.
+    """
+    current_time = int(time.time())
     one_week = 7 * 24 * 60 * 60
 
-    # Generate random values within the one-week range
     fail_time = random.randint(current_time - one_week, current_time)
     success_time = random.randint(current_time - one_week, current_time)
 
@@ -43,15 +61,36 @@ def generate_random_history():
     )
 
 def register_mission_control(stub, pairs, request_num):
+    """
+    Sends a RegisterMissionControlRequest to the server.
+
+    Args:
+        stub (ExternalCoordinatorStub): The gRPC stub for the External Coordinator service.
+        pairs (list): List of PairHistory objects to register.
+        request_num (int): The request number for logging purposes.
+
+    Returns:
+        tuple: Response time and the server response.
+    """
     start_time = time.time()
     request = RegisterMissionControlRequest(pairs=pairs)
     response = stub.RegisterMissionControl(request)
     end_time = time.time() - start_time
     if request_num > 0:
-        print(f"register_request_response_{request_num}")
+        print(f"register_request_response_{request_num}: {end_time:0.2f}")
     return end_time, response
 
 def query_aggregated_mission_control(stub, request_num):
+    """
+    Sends a QueryAggregatedMissionControlRequest to the server.
+
+    Args:
+        stub (ExternalCoordinatorStub): The gRPC stub for the External Coordinator service.
+        request_num (int): The request number for logging purposes.
+
+    Returns:
+        tuple: Response time and status code.
+    """
     start_time = time.time()
     request = QueryAggregatedMissionControlRequest()
     pairs = []
@@ -65,22 +104,36 @@ def query_aggregated_mission_control(stub, request_num):
 
     end_time = time.time() - start_time
     if request_num > 0:
-        print(f"query_request_response_{request_num}")
+        print(f"query_request_response_{request_num}: {end_time:0.2f}")
     return end_time, 200
 
-def save_data_to_json(register_response_times, query_response_times, register_failure_rate, query_failure_rate, directory="data", filename="rpc_times.json"):
-    # Create directory if it does not exist
+def save_data_to_json(register_response_times, query_response_times, register_failure_rate, query_failure_rate,
+                      mc_entries_registered, mc_entries_per_register, directory="data", filename="grpc_response_times.json"):
+    """
+    Saves response times and failure rates to a JSON file.
+
+    Args:
+        register_response_times (list): List of register request response times.
+        query_response_times (list): List of query request response times.
+        register_failure_rate (float): Failure rate for register requests.
+        query_failure_rate (float): Failure rate for query requests.
+        mc_entries_registered (int): Number of mission control entries registered.
+        mc_entries_per_register (int): Number of entries per register request.
+        directory (str): Directory to save the file in.
+        filename (str): Name of the JSON file.
+    """
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    # Construct full file path
     filepath = os.path.join(directory, filename)
 
     data = {
         "register_response_times": register_response_times,
         "query_response_times": query_response_times,
         "register_failure_rate": register_failure_rate,
-        "query_failure_rate": query_failure_rate
+        "query_failure_rate": query_failure_rate,
+        "mc_entries_per_register": mc_entries_per_register,
+        "mc_entries_registered": mc_entries_registered,
     }
 
     with open(filepath, 'w') as f:
@@ -88,16 +141,21 @@ def save_data_to_json(register_response_times, query_response_times, register_fa
     print(f"Data saved to {filepath}")
 
 def main():
-    cert = "/Users/mohamedawnallah/Library/Application Support/ExternalCoordinator/tls.crt"
-    channel = get_secure_channel(target="localhost:50050", cert=cert)
+    """
+    Main function to perform gRPC register and query operations and save the results.
+    """
+    cert = "EC_DIR/tls.cert"
+    server_url = "localhost:50050"
+    channel = get_secure_channel(target=server_url, cert=cert)
 
     stub = ExternalCoordinatorStub(channel)
 
     # Make an initial request to the server for establishing TLS handshake excluding it
     # from the performance results.
+    print("Making 1st request for TLS handshake!")
     query_aggregated_mission_control(stub=stub, request_num=0)
 
-    num_requests, num_pairs = 1000, 3
+    num_requests, mc_entries_per_register = 50_000, 3
     register_response_times, query_response_times = [], []
     register_failed_requests, query_failed_requests = 0, 0
     tasks = []
@@ -107,7 +165,7 @@ def main():
         print("Preparing request:", request+1)
         if random.choice(['register', 'query']) == 'register':
             pairs = []
-            for _ in range(num_pairs):
+            for _ in range(mc_entries_per_register):
                 node_from = generate_random_node()
                 node_to = generate_random_node()
                 history = generate_random_history()
@@ -142,12 +200,16 @@ def main():
 
     register_failure_rate = register_failed_requests / len(register_response_times)
     query_failure_rate = query_failed_requests / len(query_response_times)
-
+    mc_entries_registered = len(register_response_times) * mc_entries_per_register
     print(f"Total Register Requests: {len(register_response_times)}, Failed Register Requests: {register_failed_requests}, Register Failure Rate: {register_failure_rate:.4f}")
     print(f"Total Query Requests: {len(query_response_times)}, Failed Query Requests: {query_failed_requests}, Query Failure Rate: {query_failure_rate:.4f}")
+    print(f"Mission Contorl Entries Registered: {mc_entries_registered}")
 
     # Save data to JSON file.
-    save_data_to_json(register_response_times, query_response_times, register_failure_rate, query_failure_rate)
+    save_data_to_json(
+        register_response_times=register_response_times, query_response_times=query_response_times, register_failure_rate=register_failure_rate,
+        query_failure_rate=query_failure_rate, mc_entries_registered=mc_entries_registered, mc_entries_per_register=mc_entries_per_register,
+    )
 
 if __name__ == '__main__':
     main()
