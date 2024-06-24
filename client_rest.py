@@ -88,8 +88,8 @@ def generate_random_history():
     fail_time = random.randint(current_time - one_week, current_time)
     success_time = random.randint(current_time - one_week, current_time)
 
-    fail_amt_sat = random.randint(0, 10000)
-    success_amt_sat = random.randint(0, 10000)
+    fail_amt_sat = random.randint(1, 10000)
+    success_amt_sat = random.randint(1, 10000)
 
     return {
         "fail_time": fail_time,
