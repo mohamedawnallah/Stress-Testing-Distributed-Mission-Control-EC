@@ -7,6 +7,22 @@ import time
 import concurrent.futures
 from ecdsa import SigningKey, SECP256k1
 
+
+def get_self_signed_session(cert: str):
+    session = requests.Session()
+    session.verify = cert
+    return session
+
+def get_trusted_ca_session():
+    session = requests.Session()
+    session.verify = True
+    return session
+
+def get_insecure_session():
+    session = requests.Session()
+    session.verify = False
+    return session
+
 def register_mission_control(session, server_url, pairs, request_num):
     """
     Registers mission control data via HTTP POST with multiple node pairs.
@@ -136,18 +152,10 @@ def main():
     """
     Main function to perform RESTful register and query operations and save the results.
     """
-    cert = "EC_DIR/tls.cert"
-    server_url = "https://localhost:8081"
+    server_url = "https://<your_ec_domain>:8081"
+    session = get_trusted_ca_session()
 
-    session = requests.Session()
-    session.verify = cert
-
-    # Make an initial request to the server for establishing TLS handshake excluding it
-    # from the performance results.
-    print("Making 1st request for TLS handshake!")
-    query_aggregated_mission_control(session=session, server_url=server_url, request_num=0)
-
-    num_requests, mc_entries_per_register = 20, 3
+    num_requests, mc_entries_per_register = 12, 3
     register_response_times, query_response_times = [], []
     register_failed_requests, query_failed_requests = 0, 0
     tasks = []

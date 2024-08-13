@@ -8,13 +8,13 @@ from ecdsa import SigningKey, SECP256k1
 from external_coordinator_pb2_grpc import ExternalCoordinatorStub
 from external_coordinator_pb2 import RegisterMissionControlRequest, QueryAggregatedMissionControlRequest, PairHistory, PairData
 
-def get_secure_channel(target: str, cert: str):
+def get_self_signed_channel(target: str, cert: str):
     """
-    Creates a secure gRPC channel using the provided certificate.
+    Creates a secure gRPC channel using a self-signed certificate.
 
     Args:
-        target (str): The server address.
-        cert (str): Path to the certificate file.
+        target (str): The server address (e.g., 'localhost:50051').
+        cert (str): Path to the self-signed certificate file.
 
     Returns:
         grpc.Channel: A secure gRPC channel.
@@ -22,6 +22,20 @@ def get_secure_channel(target: str, cert: str):
     with open(cert, 'rb') as f:
         trusted_certs = f.read()
     credentials = grpc.ssl_channel_credentials(root_certificates=trusted_certs)
+    return grpc.secure_channel(target, credentials)
+
+def get_trusted_ca_channel(target: str):
+    """
+    Creates a secure gRPC channel using certificates from a trusted CA.
+
+    Args:
+        target (str): The server address (e.g., 'example.com:50051').
+
+    Returns:
+        grpc.Channel: A secure gRPC channel.
+    """
+    # Use default system-trusted CA certificates
+    credentials = grpc.ssl_channel_credentials()
     return grpc.secure_channel(target, credentials)
 
 def generate_random_node():
@@ -144,9 +158,8 @@ def main():
     """
     Main function to perform gRPC register and query operations and save the results.
     """
-    cert = "EC_DIR/tls.cert"
-    server_url = "localhost:50050"
-    channel = get_secure_channel(target=server_url, cert=cert)
+    server_url = "<your_ec_domain>:50050"
+    channel = get_trusted_ca_channel(server_url)
 
     stub = ExternalCoordinatorStub(channel)
 
@@ -155,7 +168,7 @@ def main():
     print("Making 1st request for TLS handshake!")
     query_aggregated_mission_control(stub=stub, request_num=0)
 
-    num_requests, mc_entries_per_register = 50_000, 3
+    num_requests, mc_entries_per_register = 12, 3
     register_response_times, query_response_times = [], []
     register_failed_requests, query_failed_requests = 0, 0
     tasks = []
